@@ -17,5 +17,16 @@ For more details about it, visit [here](https://drakvuf.com/).
 - In Installation type menu, select the Something else option.
 - Proceed to Space allocation menu, If you already have some pre-installed lvm partition you can run the following command to delete it. " sudo lvremove <partitionName> "
 - Now create the "swap" space, efi space and the main system space for DOM0 XEN installation. 
+![Operating System setup](/images/1.png)
+![Operating System setup](/images/2.png)
+![Operating System setup](/images/3.png)
+![Operating System setup](/images/4.png)
+![Operating System setup](/images/5.png)
+![Operating System setup](/images/6.png)
+![Operating System setup](/images/7.png)
+![Operating System setup](/images/8.png)
+
+
+
 
 
