@@ -169,6 +169,285 @@ auto lo
   iface xenbr0 inet dhcp
        bridge_ports eth0
 ```
+Make sure to add the bridge stanza, be sure to change dhcp to manual in the iface eth0 inet manual line, so that IP (Layer 3) is assigned to the bridge, not the interface. The interface will provide the physical and data-link layers (Layers 1 & 2) only.
+
+-Restart the Networking service.
+```
+sudo service network-manager restart
+```
+- Now turn on the network bridge service.
+```
+sudo gedit /etc/NetworkManager/NetworkManager.conf
+// Now a file will open there change
+// manages = true , from false to turn on the network bridge
+sudo service network-manager restart
+```
+- To check available network Vm interfaces.
+```
+brctl show
+```
+The output will show something like this.
+```
+bridge name     bridge id               STP enabled     interfaces
+virbr0          8000.4ccc6ad1847d       yes              virbr0-nic
+```
+The networking service can now be set to start automatically whenever the system is rebooted. Please review the installation instructions once again if you are having trouble getting this type of output.
+
+# Download link for windows 7 iso:
+Before proceeding furthur we need 64-bit windows 7 iso image. You can download from anywhere or can find the already tested image from [here](https://getintopc.com/softwares/operating-systems/windows-7-ail-in-one-32-64-bit-iso-may-2019-download-9618001/).
+
+# VM Creation and Configuration
+Next step is to edit the xen VM's configuration file.
+```
+sudo gedit /etc/xen/win7.cfg
+```
+This template is used for creating the Configurtion for Windows 7 VM from the download ISO file. You can modify the number of cpu, max memory, VM behaviour and other system tuning.
+```
+arch = 'x86_64'
+name = "windows7-sp1"
+maxmem = 3000
+memory = 3000
+vcpus = 2
+maxvcpus = 2
+builder = "hvm"
+boot = "cd"
+hap = 1
+on_poweroff = "destroy"
+on_reboot = "destroy"
+on_crash = "destroy"
+vnc = 1
+vnclisten = "0.0.0.0"
+vga = "stdvga"
+usb = 1
+usbdevice = "tablet"
+audio = 1
+soundhw = "hda"
+viridian = 1
+altp2m = 2
+shadow_memory = 32
+vif = [ 'type=ioemu,model=e1000,bridge=virbr0,mac=48:9e:bd:9e:2b:0d']
+disk = [ 'phy:/dev/vg/windows7-sp1,hda,w', 'file:/home/pc-1/Downloads/windows7.iso,hdc:cdrom,r' ]
+```
+Note: Make changes according to your file path of windows iso image and mac address.
+# Clone LibVMI and Installation
+- Now, Enter into the LibVMI folder and build it.
+
+```
+cd ~/drakvuf/libvmi
+autoreconf -vif
+./configure --disable-kvm --disable-bareflank --disable-file
+```
+- Output of the above command should look something this:
+```
+Feature         | Option
+----------------|---------------------------
+Xen Support     | --enable-xen=yes
+KVM Support     | --enable-kvm=no
+File Support    | --enable-file=yes
+Shm-snapshot    | --enable-shm-snapshot=no
+Rekall profiles | --enable-rekall-profiles=yes
+----------------|---------------------------
+
+OS              | Option
+----------------|---------------------------
+Windows         | --enable-windows=yes
+Linux           | --enable-linux=yes
+
+
+Tools           | Option                    | Reason
+----------------|---------------------------|----------------------------
+Examples        | --enable-examples=yes
+VMIFS           | --enable-vmifs=yes        | yes
+```
+- Build and install LibVMI with the following command
+```
+make
+sudo make install
+sudo echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:/usr/local/lib" >> ~/.bashrc
+```
+Other commands to run:
+```
+cd ~/drakvuf/libvmi
+./autogen.sh
+./configure –disable-kvm
+sudo xl list
+```
+# Clone Volatility and Installation
+```
+cd ~/drakvuf/volatility3
+python3 ./setup.py build
+sudo python3 ./setup.py install
+```
+Rekall installation
+```
+cd ~/drakvuf/rekall/rekall-core
+sudo pip install setuptools
+python setup.py build
+sudo python setup.py install
+```
+#Create VM and Configure VM from DOM0
+- Last step of this configuration is to create Windows 7 VM using the following command.
+```
+xl create /etc/xen/win7.cfg
+```
+In order to login into the virtual machine you have created, you first have to install the "gvncviewer".
+gvncviewer provides a graphical interface for the created virtual machine.
+```
+sudo apt install gvncviewer
+```
+#JSON File Creation using LibVMI vmi-win-guid tool and Volatility Framework
+- Now we will create the JSON configuration file for the Windows domain. First, we need to get the debug information for the Windows kernel via the LibVMI vmi-win-guid tool. For example, in the following my domain is named windows7-sp1.
+
+You can get the list of available virtual machines with their current running status using
+```
+sudo xl list
+```
+will output something like
+```
+Name                                        ID   Mem VCPUs	State	Time(s)
+Domain-0                                     0  4024     4     r-----     848.8
+windows7-sp1-x86                             7  3000     1     -b----      94.7
+```
+- Run following to Get the debug information.
+```
+sudo vmi-win-guid name windows7-sp1-x86
+```
+if installation is correct you should see output similar to : 
+"make sure to note PDB GUID and kernel filename as it would be required further"
+```
+Windows Kernel found @ 0x2604000
+  Version: 32-bit Windows 7
+  PE GUID: 4ce78a09412000
+  PDB GUID: 684da42a30cc450f81c535b4d18944b12
+  Kernel filename: ntkrpamp.pdb
+  Multi-processor with PAE (version 5.0 and higher)
+  Signature: 17744.
+  Machine: 332.
+  # of sections: 22.
+    # of symbols: 0.
+  Timestamp: 1290242569.
+  Characteristics: 290.
+  Optional header size: 224.
+  Optional header type: 0x10b
+  Section 1: .text
+  Section 2: _PAGELK
+  Section 3: POOLMI
+  Section 4: POOLCODE
+  Section 5: .data
+  Section 6: ALMOSTRO
+  Section 7: SPINLOCK
+  Section 8: PAGE
+  Section 9: PAGELK
+  Section 10: PAGEKD
+  Section 11: PAGEVRFY
+  Section 12: PAGEHDLS
+  Section 13: PAGEBGFX
+  Section 14: PAGEVRFB
+  Section 15: .edata
+  Section 16: PAGEDATA
+  Section 17: PAGEKDD
+  Section 18: PAGEVRFC
+  Section 19: PAGEVRFD
+  Section 20: INIT
+  Section 21: .rsrc
+  Section 22: .reloc
+  ```
+Note: If found error in running the above commands, run following command then rerun the above command.
+```
+sudo /sbin/ldconfig -v
+```
+- Copy the following string from the terminal output
+```
+PDB GUID: f794d83b0f3c4b7980797437dc4be9e71
+Kernel filename: ntkrnlmp.pdb
+```
+- Now run the following commands from the by changing the paramater accordingly to create LibVMI config with Rekall profile:
+```
+cd /tmp
+python3 ~/drakvuf/volatility3/volatility/framework/symbols/windows/pdbconv.py --guid f794d83b0f3c4b7980797437dc4be9e71 -p ntkrnlmp.pdb -o windows7-sp1.json
+sudo mv windows7-sp1.json /root
+```
+- Now generate the reakall profile.
+```
+sudo su
+printf "windows7-sp1 {\n\tvolatility_ist = \"/root/windows7-sp1.json\";\n}" >> /etc/libvmi.conf
+exit
+```
+- Now build the drakvuf using the following commands
+```
+cd ~/drakvuf
+autoreconf -vi
+./configure
+make
+```
+For first access to virtual Machine you will be required to setup the installed OS, complete it.
+Now login to Virtual Machine and install the windows with giving it login password.
+```
+gvncviewer localhost
+```
+### Windows recovery image: Restoration Point
+In future it is supposed that you will be perofrming many operations on the virtual machine. In case of any defects it is adviced to keep a system a restore point with fresh windows. Follow the steps to do so.
+1. Create a partition of 50G. (A seperate Disk drive)
+2. Turn all the firewall off.
+3. Create a restore point using the newly created partition (new drive) // Search for “create a restore point” in windows start menu.
+4. Goto My Computer --> Right click on new volume you have created --> Security --> provide the full control to all the users.
+
+### Some useful XEN commands
+- Run the following to get the PID's of the processes running in a particular VM. "sudo vmi-process-list <vmName>"
+```
+sudo vmi-process-list windows7-sp1
+```
+- Xen version:
+```
+sudo xen-detect
+```
+- List of VMs:
+```
+sudo xl list
+```
+- Destroy VM: " sudo xl destroy <id> "
+```
+sudo xl destroy 1
+```
+- CREATE VM:
+```
+sudo xl create /etc/xen/win7.cfg
+```
+# Program Execution Tracing Log Generation using Drakvuf
+- System tracing:
+```
+sudo ./src/drakvuf -r /root/windows7-sp1.json -d id
+```
+Here, id is variable. Put id value of virtual machine (use sudo xl list command) inplace of "id"
+
+- Malware Tracing Command
+```
+sudo ./src/drakvuf -r /root/windows7-sp1.json -d id -x socketmon -t time -i pid -e "Malware location inside Virtual Machine" > output.txt
+```
+Here,
+"pid" is processId, change pid to value of numerical value of pid according to pid of explorer.exe . "id" is of virtual machine (use sudo xl list command). Location of malware ".exe" file in the created windows VM example : "E:\zbot\zbot_1.exe". output.txt is the output file with trace output. By default is drakvuf location.
+
+- Network Tracing
+```
+ping -n 10000 www.google.com(from cmd of VM)
+sudo tcpdump -w "output.pcap" -i vif1.0-emu   (can be obtained from brctl show)
+```
+### Other Commands
+- Windows json file:
+```
+sudo vmi-win-guid name windows7-sp1
+```
+- VMI process list:
+```
+sudo vmi-process-list windows7-sp1
+```
+- Enabling the debug:
+```
+make clean
+./configure --enable-debug
+make
+```
+
 
 
 
